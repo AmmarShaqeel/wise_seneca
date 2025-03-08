@@ -14,7 +14,7 @@ def get_first_values(df: pd.DataFrame, fields: tuple):
         values.append(df[field].values[0])
     return tuple(values)
 
-def process_outbound_transaction(df: pd.DataFrame, category_map: dict):
+def process_outbound_transaction(df: pd.DataFrame, category_map: dict, simple):
     field_names = (
         "Source fee amount",
         "Source amount (after fees)",
@@ -34,15 +34,18 @@ def process_outbound_transaction(df: pd.DataFrame, category_map: dict):
     for row in rows:
         source_fee, source_amount, source_currency, target_amount, target_currency = row
         lines.extend([
-            f"\tAssets:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
-            f"\t{expense_category} {target_amount} {target_currency}",
+            f"  Assets:Cash:Multi:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
         ])
-        # currency transfer fees
-        if source_currency != target_currency:
+        if simple == False:
             lines.extend([
-                f"\tAssets:Wise {-source_fee} {source_currency}",
-                f"\tExpenses:Bank-Fees {source_fee} {source_currency}",
+                f"  {expense_category} {target_amount} {target_currency}",
         ])
+            # currency transfer fees
+            if source_currency != target_currency:
+                lines.extend([
+                    f"  Assets:Cash:Multi:Wise {-source_fee} {source_currency}",
+                    f"  Expenses:Financial:Fees {source_fee} {source_currency}",
+            ])
     return lines
 
 def process_neutral_transaction(df: pd.DataFrame, category_map: dict):
@@ -59,10 +62,10 @@ def process_neutral_transaction(df: pd.DataFrame, category_map: dict):
     source_fee, source_amount, source_currency, target_fee, target_amount, target_currency = get_first_values(df,field_names)
 
     return [
-        f"\tAssets:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
-        f"\tAssets:Wise {target_amount} {target_currency}",
-        f"\tAssets:Wise {-source_fee} {source_currency}",
-        f"\tExpenses:Bank-Fees {source_fee} {source_currency}",
+        f"  Assets:Cash:Multi:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
+        f"  Assets:Cash:Multi:Wise {target_amount} {target_currency}",
+        f"  Assets:Cash:Multi:Wise {-source_fee} {source_currency}",
+        f"  Expenses:Financial:Fees {source_fee} {source_currency}",
     ]
 
 def process_inbound_transaction(df: pd.DataFrame, category_map: dict):
@@ -77,11 +80,10 @@ def process_inbound_transaction(df: pd.DataFrame, category_map: dict):
     target_amount = df["Target amount (after fees)"].values[0]
 
     return [
-        f"\t{income_account} {-target_amount} {currency}",
-        f"\tAssets:Wise {target_amount} {currency}"
+        f"  Assets:Cash:Multi:Wise {target_amount} {currency}"
     ]
 
-def process_transaction(df: pd.DataFrame, category_map: dict):
+def process_transaction(df: pd.DataFrame, category_map: dict, simple):
 
     label = ""
     direction = df["Direction"].values[0]
@@ -98,12 +100,12 @@ def process_transaction(df: pd.DataFrame, category_map: dict):
     elif direction == "NEUTRAL":
         lines = process_neutral_transaction(df, category_map)
     elif direction == "OUT":
-        lines = process_outbound_transaction(df, category_map)
+        lines = process_outbound_transaction(df, category_map,simple)
 
     transaction_str = "\n".join([bean_head] + lines)
     return transaction_str
     
-def process(input: str, category_map: str, sort: str):
+def process(input: str, category_map: str, sort: str, combine:str):
     df = pd.read_csv(input)
     try:
         with open(category_map) as f:
@@ -114,9 +116,13 @@ def process(input: str, category_map: str, sort: str):
     desc = False
     if sort == "desc":
         desc = True
+
+    simple  = True
+    if combine == "False":
+        simple = False
     
     grouped = df.groupby("ID")
-    out = [ process_transaction(group, map) for name, group in grouped ]
+    out = [ process_transaction(group, map, simple) for name, group in grouped ]
     out.sort(key = lambda in_str: in_str[:10], reverse=desc)
 
     print('\n\n'.join(out)) 
@@ -126,9 +132,10 @@ def main():
     parser.add_argument("--input", "-i", required=True)
     parser.add_argument("--map")
     parser.add_argument("--sort", "-s")
+    parser.add_argument("--combine", "-c")
     parsed = parser.parse_args()
 
-    args = [vars(parsed)[k] for k in ("input","map","sort")]
+    args = [vars(parsed)[k] for k in ("input","map","sort","combine")]
     process(*args)
     
 if __name__ == "__main__":
