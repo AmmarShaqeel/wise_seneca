@@ -34,7 +34,7 @@ def process_outbound_transaction(df: pd.DataFrame, category_map: dict, simple):
     for row in rows:
         source_fee, source_amount, source_currency, target_amount, target_currency = row
         lines.extend([
-            f"  Assets:Cash:Multi:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
+            f"  Assets:Cash:Multi:Wise {-round(source_amount+source_fee,2)} {source_currency} @@ {target_amount} {target_currency}",
         ])
         if simple == False:
             lines.extend([
@@ -62,10 +62,8 @@ def process_neutral_transaction(df: pd.DataFrame, category_map: dict):
     source_fee, source_amount, source_currency, target_fee, target_amount, target_currency = get_first_values(df,field_names)
 
     return [
-        f"  Assets:Cash:Multi:Wise {-source_amount} {source_currency} @@ {target_amount} {target_currency}",
+        f"  Assets:Cash:Multi:Wise {-round(source_amount +  source_fee, 2)} {source_currency} @@ {target_amount} {target_currency}",
         f"  Assets:Cash:Multi:Wise {target_amount} {target_currency}",
-        f"  Assets:Cash:Multi:Wise {-source_fee} {source_currency}",
-        f"  Expenses:Financial:Fees {source_fee} {source_currency}",
     ]
 
 def process_inbound_transaction(df: pd.DataFrame, category_map: dict):
